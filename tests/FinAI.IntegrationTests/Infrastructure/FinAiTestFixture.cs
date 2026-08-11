@@ -32,6 +32,14 @@ public sealed class FinAiTestFixture : IAsyncLifetime
     {
         await _postgres.StartAsync();
 
+        // Aplica migrations ANTES de criar a factory — o host inicia o seed de papéis
+        // no startup (Program.cs), que exige as tabelas de Identity já existentes.
+        var services = new ServiceCollection();
+        services.AddDbContext<FinAiDbContext>(o => o.UseNpgsql(_postgres.GetConnectionString()));
+        await using var provider = services.BuildServiceProvider();
+        var db = provider.GetRequiredService<FinAiDbContext>();
+        await db.Database.MigrateAsync();
+
         Factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
@@ -40,18 +48,6 @@ public sealed class FinAiTestFixture : IAsyncLifetime
                 builder.UseSetting("RateLimiting:Enabled", "false");
                 builder.UseSetting("Logging:LogLevel:Default", "None");
             });
-
-        // Aplica migrations + seed no banco real e cria os papéis
-        using var scope = Factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<FinAiDbContext>();
-        await db.Database.MigrateAsync();
-
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-        foreach (var role in new[] { AuthService.RoleUser, AuthService.RoleAdmin })
-        {
-            if (!await roleManager.RoleExistsAsync(role))
-                await roleManager.CreateAsync(new IdentityRole<Guid>(role));
-        }
     }
 
     public async Task DisposeAsync()
