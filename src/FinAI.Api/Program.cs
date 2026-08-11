@@ -9,7 +9,10 @@ using FinAI.Api.Services;
 using FinAI.Api.Services.Accounts;
 using FinAI.Api.Services.AI;
 using FinAI.Api.Services.Analytics;
+using FinAI.Api.Services.AnomalyDetection;
+using FinAI.Api.Services.AnomalyDetection.Models;
 using FinAI.Api.Services.Audit;
+using FinAI.Api.Services.Forecasting;
 using FinAI.Api.Services.Auth;
 using FinAI.Api.Services.Budgets;
 using FinAI.Api.Services.Categories;
@@ -138,6 +141,12 @@ builder.Services.AddScoped<ISpendingAnalyzer, SpendingAnalyzer>();
 builder.Services.AddScoped<IBehaviorAnalyzer, BehaviorAnalyzer>();
 builder.Services.AddScoped<IMonthlyTrendAnalyzer, MonthlyTrendAnalyzer>();
 builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
+
+// ── DI: Forecasting & Anomalias (v0.5) ─────────────────────────────────────
+builder.Services.Configure<AnomalyDetectionOptions>(builder.Configuration.GetSection(AnomalyDetectionOptions.SectionName));
+builder.Services.AddScoped<IMovingAverageForecaster, MovingAverageForecaster>();
+builder.Services.AddScoped<IForecastService, ForecastService>();
+builder.Services.AddScoped<IAnomalyDetectionService, AnomalyDetectionService>();
 
 // ── Swagger/OpenAPI ────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
