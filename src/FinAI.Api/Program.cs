@@ -265,19 +265,9 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
-// ── Seed de papéis (User, Admin) — garante que existam em qualquer ambiente ─
-using (var scope = app.Services.CreateScope())
-{
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-    foreach (var role in new[] { AuthService.RoleUser, AuthService.RoleAdmin })
-    {
-        if (!await roleManager.RoleExistsAsync(role))
-            await roleManager.CreateAsync(new IdentityRole<Guid>(role));
-    }
-}
-
 // ── Migrations automáticas (Docker/Production) ─────────────────────────────
 // Em dev/testes, as migrations são aplicadas via CLI/Testcontainers.
+// ⚠️ Roda ANTES do seed de papéis para garantir o schema existir.
 if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"))
 {
     using var scope = app.Services.CreateScope();
@@ -295,6 +285,17 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"
             logger.LogWarning(ex, "Migration attempt {Attempt}/5 failed; retrying in 3s", attempt);
             await Task.Delay(TimeSpan.FromSeconds(3));
         }
+    }
+}
+
+// ── Seed de papéis (User, Admin) — garante que existam em qualquer ambiente ─
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+    foreach (var role in new[] { AuthService.RoleUser, AuthService.RoleAdmin })
+    {
+        if (!await roleManager.RoleExistsAsync(role))
+            await roleManager.CreateAsync(new IdentityRole<Guid>(role));
     }
 }
 
