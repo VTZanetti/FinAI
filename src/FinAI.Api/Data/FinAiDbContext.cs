@@ -24,6 +24,8 @@ public class FinAiDbContext : IdentityDbContext<FinAiUser, IdentityRole<Guid>, G
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<ClassificationCache> ClassificationCaches => Set<ClassificationCache>();
+    public DbSet<FinancialDocument> Documents => Set<FinancialDocument>();
+    public DbSet<DocumentChunk> DocumentChunks => Set<DocumentChunk>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

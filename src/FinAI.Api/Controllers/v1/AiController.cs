@@ -49,7 +49,7 @@ public class AiController : ControllerBase
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> FinancialAdvisor([FromBody] Services.AI.AdvisorRequest request, CancellationToken cancellationToken)
     {
-        var result = await _advisor.AskAsync(_currentUser.RequireUserId(), request.Question, cancellationToken);
+        var result = await _advisor.AskAsync(_currentUser.RequireUserId(), request.Question, request.IncludeDocuments, cancellationToken);
 
         if (!result.IsSuccess)
         {

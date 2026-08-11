@@ -1,19 +1,22 @@
 using FinAI.Api.Common;
 using FinAI.Api.Services.Analytics;
+using FinAI.Api.Services.Documents;
+using Microsoft.Extensions.Options;
+using Pgvector;
 
 namespace FinAI.Api.Services.AI;
 
-public sealed record AdvisorRequest(string Question);
+public sealed record AdvisorRequest(string Question, bool IncludeDocuments = false);
 
 public sealed record AdvisorResponse(string Answer, object Context, IReadOnlyList<string> Sources);
 
 public interface IFinancialAdvisorService
 {
-    Task<Result<AdvisorResponse>> AskAsync(Guid userId, string question, CancellationToken cancellationToken = default);
+    Task<Result<AdvisorResponse>> AskAsync(Guid userId, string question, bool includeDocuments = false, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// Assistente financeiro: contexto real do usuário (transações + analytics) → LLM → resposta com fonte.
+/// Assistente financeiro: contexto real do usuário (transações + analytics + documentos RAG) → LLM → resposta com fonte.
 /// Fluxo: contexto primeiro, LLM depois (02-arquitetura.md §4.2).
 /// </summary>
 public class FinancialAdvisorService : IFinancialAdvisorService
@@ -23,21 +26,30 @@ public class FinancialAdvisorService : IFinancialAdvisorService
     private readonly IChatService _chat;
     private readonly IPromptBuilder _promptBuilder;
     private readonly IAnalyticsService _analytics;
+    private readonly IEmbeddingService _embeddings;
+    private readonly IVectorStore _vectorStore;
+    private readonly DocumentOptions _documentOptions;
     private readonly ILogger<FinancialAdvisorService> _logger;
 
     public FinancialAdvisorService(
         IChatService chat,
         IPromptBuilder promptBuilder,
         IAnalyticsService analytics,
+        IEmbeddingService embeddings,
+        IVectorStore vectorStore,
+        IOptions<DocumentOptions> documentOptions,
         ILogger<FinancialAdvisorService> logger)
     {
         _chat = chat;
         _promptBuilder = promptBuilder;
         _analytics = analytics;
+        _embeddings = embeddings;
+        _vectorStore = vectorStore;
+        _documentOptions = documentOptions.Value;
         _logger = logger;
     }
 
-    public async Task<Result<AdvisorResponse>> AskAsync(Guid userId, string question, CancellationToken cancellationToken = default)
+    public async Task<Result<AdvisorResponse>> AskAsync(Guid userId, string question, bool includeDocuments = false, CancellationToken cancellationToken = default)
     {
         var sanitized = (question ?? string.Empty).Trim();
         if (sanitized.Length == 0)
@@ -57,7 +69,21 @@ public class FinancialAdvisorService : IFinancialAdvisorService
         var behaviorResult = await _analytics.GetBehaviorAsync(userId, months, cancellationToken: cancellationToken);
         var trendResult = await _analytics.GetMonthlyTrendAsync(userId, Math.Min(months, 12), cancellationToken: cancellationToken);
 
-        // 3. Contexto estruturado (JSON)
+        var sources = new List<string> { "analytics" };
+
+        // 3. RAG: busca semântica em documentos do usuário (opcional)
+        object? documentContext = null;
+        if (includeDocuments)
+        {
+            var ragResult = await SearchDocumentsAsync(userId, sanitized, cancellationToken);
+            if (ragResult is { Count: > 0 })
+            {
+                documentContext = ragResult;
+                sources.Add("documents");
+            }
+        }
+
+        // 4. Contexto estruturado (JSON)
         var context = new
         {
             period = new { from, to },
@@ -65,10 +91,11 @@ public class FinancialAdvisorService : IFinancialAdvisorService
             byCategory = summaryResult.Value.ByCategory,
             recurring = summaryResult.Value.Recurring,
             behaviorInsights = behaviorResult.IsSuccess ? behaviorResult.Value!.Insights : null,
-            monthlyTrend = trendResult.IsSuccess ? trendResult.Value!.Trend : null
+            monthlyTrend = trendResult.IsSuccess ? trendResult.Value!.Trend : null,
+            documents = documentContext
         };
 
-        // 4. LLM com prompt anti-alucinação
+        // 5. LLM com prompt anti-alucinação
         var prompt = _promptBuilder.BuildAdvisorPrompt(sanitized, context);
         var response = await _chat.ChatAsync(new LlmChatRequest(prompt.SystemPrompt, prompt.UserMessage), cancellationToken);
 
@@ -78,15 +105,30 @@ public class FinancialAdvisorService : IFinancialAdvisorService
 
         var answer = response.Content.Trim();
 
-        // 5. Sanitização básica: rejeitar respostas que exponham o system prompt
+        // 6. Sanitização básica: rejeitar respostas que exponham o system prompt
         if (IsPromptLeak(response.Content))
         {
             _logger.LogWarning("Advisor response may contain prompt leakage");
             return Result.Failure<AdvisorResponse>(ErrorCode.Internal, "Could not generate a safe response.");
         }
 
-        return Result.Success(new AdvisorResponse(answer, context, ["analytics"]));
+        return Result.Success(new AdvisorResponse(answer, context, sources));
     }
+
+    private async Task<IReadOnlyList<DocumentSearchHitDto>?> SearchDocumentsAsync(Guid userId, string question, CancellationToken cancellationToken)
+    {
+        var embedding = await _embeddings.EmbedAsync(question, cancellationToken);
+        if (!embedding.Success || embedding.Values.Length == 0)
+            return null;
+
+        var hits = await _vectorStore.SearchAsync(userId, new Vector(embedding.Values), _documentOptions.SearchTopK, _documentOptions.SearchMinScore, cancellationToken);
+        if (hits.Count == 0)
+            return null;
+
+        return hits.Select(h => new DocumentSearchHitDto(h.DocumentId, h.FileName, h.Content, h.Score)).ToList();
+    }
+
+    public sealed record DocumentSearchHitDto(Guid DocumentId, string FileName, string Content, float Score);
 
     internal static (DateOnly From, DateOnly To) ResolvePeriod(string question)
     {

@@ -12,6 +12,7 @@ using FinAI.Api.Services.Analytics;
 using FinAI.Api.Services.AnomalyDetection;
 using FinAI.Api.Services.AnomalyDetection.Models;
 using FinAI.Api.Services.Audit;
+using FinAI.Api.Services.Documents;
 using FinAI.Api.Services.Forecasting;
 using FinAI.Api.Services.Auth;
 using FinAI.Api.Services.Budgets;
@@ -22,11 +23,17 @@ using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Pgvector.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Background services não devem derrubar o host (ex.: cancellation no shutdown)
+builder.Services.Configure<HostOptions>(o =>
+    o.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
 
 // ── Serilog (console + arquivo com rotação) ────────────────────────────────
 builder.Host.UseSerilog((context, services, configuration) =>
@@ -54,7 +61,7 @@ builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
 
 // ── EF Core + PostgreSQL ───────────────────────────────────────────────────
 builder.Services.AddDbContext<FinAiDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), o => o.UseVector()));
 
 // ── Identity ───────────────────────────────────────────────────────────────
 builder.Services.AddIdentityCore<FinAiUser>(options =>
@@ -147,6 +154,28 @@ builder.Services.Configure<AnomalyDetectionOptions>(builder.Configuration.GetSec
 builder.Services.AddScoped<IMovingAverageForecaster, MovingAverageForecaster>();
 builder.Services.AddScoped<IForecastService, ForecastService>();
 builder.Services.AddScoped<IAnomalyDetectionService, AnomalyDetectionService>();
+
+// ── DI: Documentos & RAG (v0.6) ────────────────────────────────────────────
+builder.Services.Configure<DocumentOptions>(builder.Configuration.GetSection(DocumentOptions.SectionName));
+builder.Services.AddScoped<IDocumentRepository, DocumentRepository>();
+builder.Services.AddScoped<ITextExtractor, PdfTextExtractor>();
+builder.Services.AddScoped<IChunker, TokenChunker>();
+builder.Services.AddScoped<IEmbeddingService, OllamaEmbeddingService>();
+builder.Services.AddScoped<IVectorStore, PgVectorStore>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
+
+// O processador de documentos (BackgroundService) só roda quando habilitado
+// (testes de integração desligam para evitar o pipeline async real).
+if (builder.Configuration.GetValue<bool>("Documents:ProcessingEnabled", true))
+{
+    builder.Services.AddSingleton<DocumentProcessor>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<DocumentProcessor>());
+    builder.Services.AddScoped<IDocumentProcessor>(sp => sp.GetRequiredService<DocumentProcessor>());
+}
+else
+{
+    builder.Services.AddScoped<IDocumentProcessor, NoopDocumentProcessor>();
+}
 
 // ── Swagger/OpenAPI ────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
