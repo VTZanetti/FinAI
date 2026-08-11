@@ -2,8 +2,6 @@
 
 API financeira inteligente em ASP.NET Core: recebe transações e entrega análises, previsões e recomendações com IA.
 
-> A documentação completa (arquitetura, requisitos, planos por fase) fica em `docs/`, que **não é versionado** neste repositório.
-
 ## Stack
 
 - .NET 8+ / ASP.NET Core, EF Core, PostgreSQL
@@ -38,5 +36,4 @@ dotnet test
 src/FinAI.Api/            # Web API
 tests/FinAI.UnitTests/    # Testes unitários (xUnit + NSubstitute)
 tests/FinAI.IntegrationTests/  # Testes de integração (Testcontainers PostgreSQL)
-docs/                     # Documentação local (não versionada)
 ```
