@@ -2,6 +2,7 @@ using FinAI.Api.Common;
 using FinAI.Api.Models;
 using FinAI.Api.Repositories;
 using FinAI.Api.Services;
+using FinAI.Api.Services.Audit;
 using FinAI.Api.Services.Categories;
 using FluentAssertions;
 using NSubstitute;
@@ -16,8 +17,9 @@ public class CategoryServiceTests
 
     private readonly ICategoryRepository _categories = Substitute.For<ICategoryRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IAuditService _audit = Substitute.For<IAuditService>();
 
-    private CategoryService CreateService() => new(_categories, _unitOfWork);
+    private CategoryService CreateService() => new(_categories, _unitOfWork, _audit);
 
     [Fact]
     public async Task CreateAsync_DuplicateName_ReturnsConflict()

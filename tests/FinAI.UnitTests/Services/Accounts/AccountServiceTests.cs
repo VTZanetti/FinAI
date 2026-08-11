@@ -4,6 +4,7 @@ using FinAI.Api.Models.Enums;
 using FinAI.Api.Repositories;
 using FinAI.Api.Services;
 using FinAI.Api.Services.Accounts;
+using FinAI.Api.Services.Audit;
 using FluentAssertions;
 using NSubstitute;
 
@@ -17,8 +18,9 @@ public class AccountServiceTests
 
     private readonly IAccountRepository _accounts = Substitute.For<IAccountRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IAuditService _audit = Substitute.For<IAuditService>();
 
-    private AccountService CreateService() => new(_accounts, _unitOfWork);
+    private AccountService CreateService() => new(_accounts, _unitOfWork, _audit);
 
     [Fact]
     public async Task CreateAsync_WithInitialBalance_SetsCurrentBalanceEqual()

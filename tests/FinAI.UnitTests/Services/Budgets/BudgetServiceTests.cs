@@ -2,6 +2,7 @@ using FinAI.Api.Common;
 using FinAI.Api.Models;
 using FinAI.Api.Repositories;
 using FinAI.Api.Services;
+using FinAI.Api.Services.Audit;
 using FinAI.Api.Services.Budgets;
 using FluentAssertions;
 using NSubstitute;
@@ -18,8 +19,9 @@ public class BudgetServiceTests
     private readonly ICategoryRepository _categories = Substitute.For<ICategoryRepository>();
     private readonly ITransactionRepository _transactions = Substitute.For<ITransactionRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
+    private readonly IAuditService _audit = Substitute.For<IAuditService>();
 
-    private BudgetService CreateService() => new(_budgets, _categories, _transactions, _unitOfWork);
+    private BudgetService CreateService() => new(_budgets, _categories, _transactions, _unitOfWork, _audit);
 
     [Fact]
     public async Task CreateAsync_InvalidMonth_ReturnsValidationError()

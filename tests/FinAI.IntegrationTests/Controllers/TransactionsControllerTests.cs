@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FinAI.Api.DTOs.Accounts;
@@ -13,17 +14,24 @@ namespace FinAI.IntegrationTests.Controllers;
 public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
 {
     private readonly FinAiTestFixture _fixture;
-    private readonly HttpClient _client;
+    private readonly Lazy<Task<HttpClient>> _authenticatedClient;
 
     public TransactionsControllerTests(FinAiTestFixture fixture)
     {
         _fixture = fixture;
-        _client = fixture.CreateClient();
+        _authenticatedClient = new Lazy<Task<HttpClient>>(async () =>
+        {
+            var (client, auth) = await _fixture.CreateAuthenticatedClientAsync();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+            return client;
+        });
     }
 
-    private async Task<AccountResponse> CreateAccountAsync(string name = "Conta")
+    private Task<HttpClient> ClientAsync() => _authenticatedClient.Value;
+
+    private async Task<AccountResponse> CreateAccountAsync(HttpClient client, string name = "Conta")
     {
-        var response = await _client.PostAsJsonAsync("/api/v1/accounts", new
+        var response = await client.PostAsJsonAsync("/api/v1/accounts", new
         {
             name,
             type = "Checking",
@@ -38,10 +46,11 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task CreateTransaction_Expense_UpdatesAccountBalance()
     {
         // Arrange
-        var account = await CreateAccountAsync();
+        var client = await ClientAsync();
+        var account = await CreateAccountAsync(client);
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/transactions", new
+        var response = await client.PostAsJsonAsync("/api/v1/transactions", new
         {
             accountId = account.Id,
             description = "UBER *TRIP",
@@ -59,7 +68,7 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
         tx.Type.ToString().Should().Be("Expense"); // derivado do sinal
 
         // Saldo da conta recalculado: 1000 - 27.90 = 972.10
-        var accountResponse = await _client.GetAsync($"/api/v1/accounts/{account.Id}");
+        var accountResponse = await client.GetAsync($"/api/v1/accounts/{account.Id}");
         var updated = await accountResponse.ReadAsync<AccountResponse>();
         updated!.CurrentBalance.Should().Be(972.10m);
     }
@@ -68,10 +77,11 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task CreateTransaction_Income_DerivesIncomeType()
     {
         // Arrange
-        var account = await CreateAccountAsync();
+        var client = await ClientAsync();
+        var account = await CreateAccountAsync(client);
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/transactions", new
+        var response = await client.PostAsJsonAsync("/api/v1/transactions", new
         {
             accountId = account.Id,
             description = "Salário",
@@ -86,7 +96,7 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
         tx!.Type.ToString().Should().Be("Income");
         tx.IsRecurring.Should().BeTrue();
 
-        var updated = await (await _client.GetAsync($"/api/v1/accounts/{account.Id}")).ReadAsync<AccountResponse>();
+        var updated = await (await client.GetAsync($"/api/v1/accounts/{account.Id}")).ReadAsync<AccountResponse>();
         updated!.CurrentBalance.Should().Be(6000m); // 1000 + 5000
     }
 
@@ -94,8 +104,10 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task CreateTransaction_AccountOfAnotherUser_ReturnsNotFound()
     {
         // Arrange: id de conta inexistente (não pertence ao usuário)
+        var client = await ClientAsync();
+
         // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/transactions", new
+        var response = await client.PostAsJsonAsync("/api/v1/transactions", new
         {
             accountId = Guid.NewGuid(),
             description = "Alheia",
@@ -111,7 +123,8 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task CreateTransaction_DuplicateExternalId_ReturnsConflict()
     {
         // Arrange
-        var account = await CreateAccountAsync();
+        var client = await ClientAsync();
+        var account = await CreateAccountAsync(client);
         var payload = new
         {
             accountId = account.Id,
@@ -121,11 +134,11 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
             externalId = "ext-20260801-001"
         };
 
-        var first = await _client.PostAsJsonAsync("/api/v1/transactions", payload);
+        var first = await client.PostAsJsonAsync("/api/v1/transactions", payload);
         first.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Act: mesmo ExternalId
-        var second = await _client.PostAsJsonAsync("/api/v1/transactions", payload);
+        var second = await client.PostAsJsonAsync("/api/v1/transactions", payload);
 
         // Assert: deduplicação
         second.StatusCode.Should().Be(HttpStatusCode.Conflict);
@@ -135,15 +148,16 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task ListTransactions_FiltersByPeriodAndSearch()
     {
         // Arrange
-        var account = await CreateAccountAsync();
-        await _client.PostAsJsonAsync("/api/v1/transactions", new
+        var client = await ClientAsync();
+        var account = await CreateAccountAsync(client);
+        await client.PostAsJsonAsync("/api/v1/transactions", new
         {
             accountId = account.Id,
             description = "Mercado em julho",
             amount = -100m,
             date = "2026-07-15"
         });
-        await _client.PostAsJsonAsync("/api/v1/transactions", new
+        await client.PostAsJsonAsync("/api/v1/transactions", new
         {
             accountId = account.Id,
             description = "Restaurante em agosto",
@@ -152,7 +166,7 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
         });
 
         // Act: período de agosto + busca
-        var response = await _client.GetAsync("/api/v1/transactions?from=2026-08-01&to=2026-08-31&search=Restaurante");
+        var response = await client.GetAsync("/api/v1/transactions?from=2026-08-01&to=2026-08-31&search=Restaurante");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -166,10 +180,11 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task ListTransactions_Pagination_ReturnsEnvelope()
     {
         // Arrange
-        var account = await CreateAccountAsync();
+        var client = await ClientAsync();
+        var account = await CreateAccountAsync(client);
         for (var i = 1; i <= 5; i++)
         {
-            await _client.PostAsJsonAsync("/api/v1/transactions", new
+            await client.PostAsJsonAsync("/api/v1/transactions", new
             {
                 accountId = account.Id,
                 description = $"Transação {i}",
@@ -179,7 +194,7 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
         }
 
         // Act: filtra pela conta criada (isola do restante dos dados do banco compartilhado)
-        var response = await _client.GetAsync($"/api/v1/transactions?accountId={account.Id}&page=1&pageSize=2");
+        var response = await client.GetAsync($"/api/v1/transactions?accountId={account.Id}&page=1&pageSize=2");
 
         // Assert
         var envelope = await response.ReadAsync<JsonElement>();
@@ -191,8 +206,11 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     [Fact]
     public async Task GetTransaction_NotFound_Returns404()
     {
+        // Arrange
+        var client = await ClientAsync();
+
         // Act
-        var response = await _client.GetAsync($"/api/v1/transactions/{Guid.NewGuid()}");
+        var response = await client.GetAsync($"/api/v1/transactions/{Guid.NewGuid()}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -202,8 +220,9 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task DeleteTransaction_RecalculatesBalance()
     {
         // Arrange
-        var account = await CreateAccountAsync(); // 1000
-        var create = await _client.PostAsJsonAsync("/api/v1/transactions", new
+        var client = await ClientAsync();
+        var account = await CreateAccountAsync(client); // 1000
+        var create = await client.PostAsJsonAsync("/api/v1/transactions", new
         {
             accountId = account.Id,
             description = "Para excluir",
@@ -213,11 +232,11 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
         var tx = await create.ReadAsync<TransactionResponse>();
 
         // Act
-        var response = await _client.DeleteAsync($"/api/v1/transactions/{tx!.Id}");
+        var response = await client.DeleteAsync($"/api/v1/transactions/{tx!.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        var updated = await (await _client.GetAsync($"/api/v1/accounts/{account.Id}")).ReadAsync<AccountResponse>();
+        var updated = await (await client.GetAsync($"/api/v1/accounts/{account.Id}")).ReadAsync<AccountResponse>();
         updated!.CurrentBalance.Should().Be(1000m); // volta ao inicial
     }
 
@@ -225,8 +244,9 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task UpdateTransaction_ChangesTypeAndBalance()
     {
         // Arrange
-        var account = await CreateAccountAsync(); // 1000
-        var create = await _client.PostAsJsonAsync("/api/v1/transactions", new
+        var client = await ClientAsync();
+        var account = await CreateAccountAsync(client); // 1000
+        var create = await client.PostAsJsonAsync("/api/v1/transactions", new
         {
             accountId = account.Id,
             description = "Original",
@@ -236,7 +256,7 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
         var tx = await create.ReadAsync<TransactionResponse>();
 
         // Act: vira receita
-        var response = await _client.PutAsJsonAsync($"/api/v1/transactions/{tx!.Id}", new
+        var response = await client.PutAsJsonAsync($"/api/v1/transactions/{tx!.Id}", new
         {
             accountId = account.Id,
             description = "Atualizada",
@@ -250,7 +270,7 @@ public class TransactionsControllerTests : IClassFixture<FinAiTestFixture>
         var updatedTx = await response.ReadAsync<TransactionResponse>();
         updatedTx!.Type.ToString().Should().Be("Income");
 
-        var updated = await (await _client.GetAsync($"/api/v1/accounts/{account.Id}")).ReadAsync<AccountResponse>();
+        var updated = await (await client.GetAsync($"/api/v1/accounts/{account.Id}")).ReadAsync<AccountResponse>();
         updated!.CurrentBalance.Should().Be(1300m); // 1000 + 300
     }
 }

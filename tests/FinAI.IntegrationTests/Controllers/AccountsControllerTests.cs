@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FinAI.Api.DTOs.Accounts;
@@ -17,14 +18,23 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
     public AccountsControllerTests(FinAiTestFixture fixture)
     {
         _fixture = fixture;
-        _client = fixture.CreateClient();
+        _client = fixture.Factory.CreateClient();
+    }
+
+    private async Task<HttpClient> AuthenticatedClientAsync()
+    {
+        var (client, _) = await _fixture.CreateAuthenticatedClientAsync();
+        return client;
     }
 
     [Fact]
     public async Task CreateAccount_ReturnsCreatedWithCurrentBalance()
     {
+        // Arrange
+        var client = await AuthenticatedClientAsync();
+
         // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/accounts", new
+        var response = await client.PostAsJsonAsync("/api/v1/accounts", new
         {
             name = "Conta Corrente Nubank",
             type = "Checking",
@@ -45,8 +55,11 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
     [Fact]
     public async Task CreateAccount_InvalidType_ReturnsBadRequest()
     {
+        // Arrange
+        var client = await AuthenticatedClientAsync();
+
         // Act
-        var response = await _client.PostAsJsonAsync("/api/v1/accounts", new
+        var response = await client.PostAsJsonAsync("/api/v1/accounts", new
         {
             name = "Invalida",
             type = "Pix",
@@ -61,8 +74,9 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
     [Fact]
     public async Task GetAccount_ByOtherUser_ReturnsNotFound()
     {
-        // Arrange: conta criada pelo TestUserId (dev user da fixture)
-        var createResponse = await _client.PostAsJsonAsync("/api/v1/accounts", new
+        // Arrange: usuário A cria conta
+        var (userA, _) = await _fixture.CreateAuthenticatedClientAsync();
+        var createResponse = await userA.PostAsJsonAsync("/api/v1/accounts", new
         {
             name = "Conta Alheia",
             type = "Checking",
@@ -72,11 +86,9 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
         var created = await createResponse.ReadAsync<AccountResponse>();
 
-        // Act: consulta como outro usuário (override do DevUser:Id)
-        var otherClient = _fixture.Factory.WithWebHostBuilder(b =>
-                b.UseSetting("DevUser:Id", FinAiTestFixture.OtherUserId.ToString()))
-            .CreateClient();
-        var response = await otherClient.GetAsync($"/api/v1/accounts/{created!.Id}");
+        // Act: usuário B tenta acessar
+        var (userB, _) = await _fixture.CreateAuthenticatedClientAsync();
+        var response = await userB.GetAsync($"/api/v1/accounts/{created!.Id}");
 
         // Assert: 404 — nunca 403 (não vaza existência)
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -86,7 +98,8 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task UpdateAccount_ChangesNameTypeCurrency_KeepsInitialBalance()
     {
         // Arrange
-        var createResponse = await _client.PostAsJsonAsync("/api/v1/accounts", new
+        var client = await AuthenticatedClientAsync();
+        var createResponse = await client.PostAsJsonAsync("/api/v1/accounts", new
         {
             name = "Conta Antiga",
             type = "Checking",
@@ -96,7 +109,7 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
         var created = await createResponse.ReadAsync<AccountResponse>();
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/v1/accounts/{created!.Id}", new
+        var response = await client.PutAsJsonAsync($"/api/v1/accounts/{created!.Id}", new
         {
             name = "Conta Nova",
             type = "Savings",
@@ -116,7 +129,8 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task DeleteAccount_WithoutTransactions_ReturnsNoContent()
     {
         // Arrange
-        var createResponse = await _client.PostAsJsonAsync("/api/v1/accounts", new
+        var client = await AuthenticatedClientAsync();
+        var createResponse = await client.PostAsJsonAsync("/api/v1/accounts", new
         {
             name = "Conta Descartável",
             type = "Cash",
@@ -126,7 +140,7 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
         var created = await createResponse.ReadAsync<AccountResponse>();
 
         // Act
-        var response = await _client.DeleteAsync($"/api/v1/accounts/{created!.Id}");
+        var response = await client.DeleteAsync($"/api/v1/accounts/{created!.Id}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -135,8 +149,11 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
     [Fact]
     public async Task DeleteAccount_NotFound_Returns404()
     {
+        // Arrange
+        var client = await AuthenticatedClientAsync();
+
         // Act
-        var response = await _client.DeleteAsync($"/api/v1/accounts/{Guid.NewGuid()}");
+        var response = await client.DeleteAsync($"/api/v1/accounts/{Guid.NewGuid()}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -146,11 +163,12 @@ public class AccountsControllerTests : IClassFixture<FinAiTestFixture>
     public async Task ListAccounts_ReturnsPagedEnvelope()
     {
         // Arrange
-        await _client.PostAsJsonAsync("/api/v1/accounts", new { name = "Conta 1", type = "Checking", currency = "BRL", initialBalance = 0m });
-        await _client.PostAsJsonAsync("/api/v1/accounts", new { name = "Conta 2", type = "Savings", currency = "BRL", initialBalance = 0m });
+        var client = await AuthenticatedClientAsync();
+        await client.PostAsJsonAsync("/api/v1/accounts", new { name = "Conta 1", type = "Checking", currency = "BRL", initialBalance = 0m });
+        await client.PostAsJsonAsync("/api/v1/accounts", new { name = "Conta 2", type = "Savings", currency = "BRL", initialBalance = 0m });
 
         // Act
-        var response = await _client.GetAsync("/api/v1/accounts?page=1&pageSize=20");
+        var response = await client.GetAsync("/api/v1/accounts?page=1&pageSize=20");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
