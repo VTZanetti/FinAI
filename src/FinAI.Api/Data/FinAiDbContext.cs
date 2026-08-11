@@ -23,6 +23,7 @@ public class FinAiDbContext : IdentityDbContext<FinAiUser, IdentityRole<Guid>, G
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<ClassificationCache> ClassificationCaches => Set<ClassificationCache>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -2,6 +2,7 @@ using FinAI.Api.Common;
 using FinAI.Api.Models;
 using FinAI.Api.Models.Enums;
 using FinAI.Api.Repositories;
+using FinAI.Api.Services.AI;
 using FinAI.Api.Services.Audit;
 
 namespace FinAI.Api.Services.Transactions;
@@ -13,19 +14,22 @@ public class TransactionService : ITransactionService
     private readonly ICategoryRepository _categories;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditService _audit;
+    private readonly IClassificationService _classification;
 
     public TransactionService(
         ITransactionRepository transactions,
         IAccountRepository accounts,
         ICategoryRepository categories,
         IUnitOfWork unitOfWork,
-        IAuditService audit)
+        IAuditService audit,
+        IClassificationService classification)
     {
         _transactions = transactions;
         _accounts = accounts;
         _categories = categories;
         _unitOfWork = unitOfWork;
         _audit = audit;
+        _classification = classification;
     }
 
     public async Task<ServiceResult<Transaction>> CreateAsync(Guid userId, CreateTransactionRequest request, CancellationToken cancellationToken = default)
@@ -46,12 +50,21 @@ public class TransactionService : ITransactionService
         if (request.CategoryId.HasValue && await _categories.GetByIdAsync(request.CategoryId.Value, userId, cancellationToken) is null)
             return ServiceResult<Transaction>.Failure(ErrorCode.NotFound, "Category not found");
 
+        // Classificação automática: categoryId ausente → cascata rules → cache → LLM → fallback
+        Guid? categoryId = request.CategoryId;
+        ClassificationResult? classification = null;
+        if (!categoryId.HasValue)
+        {
+            classification = await _classification.ClassifyAsync(userId, request.Description, request.Amount, cancellationToken);
+            categoryId = classification?.CategoryId; // null → transação sem categoria (não bloqueia)
+        }
+
         var transaction = new Transaction
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             AccountId = request.AccountId,
-            CategoryId = request.CategoryId,
+            CategoryId = categoryId,
             Description = request.Description.Trim(),
             Amount = request.Amount,
             Date = request.Date,
@@ -60,6 +73,8 @@ public class TransactionService : ITransactionService
             ExternalId = string.IsNullOrWhiteSpace(request.ExternalId) ? null : request.ExternalId.Trim(),
             CreatedAt = DateTimeOffset.UtcNow
         };
+
+        _lastClassification = classification;
 
         await _transactions.AddAsync(transaction, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken); // persiste a transação primeiro
@@ -76,6 +91,13 @@ public class TransactionService : ITransactionService
 
         return ServiceResult<Transaction>.Success(saved ?? transaction, 0, 0, 1, 20);
     }
+
+    /// <summary>
+    /// Última classificação automática aplicada (para o controller expor no response).
+    /// </summary>
+    public ClassificationResult? LastClassification => _lastClassification;
+
+    private ClassificationResult? _lastClassification;
 
     public async Task<ServiceResult<Transaction>> GetByIdAsync(Guid userId, Guid id, CancellationToken cancellationToken = default)
     {

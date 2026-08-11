@@ -37,7 +37,8 @@ public class TransactionsController : ControllerBase
     {
         var result = await _transactions.CreateAsync(_currentUser.RequireUserId(), request, cancellationToken);
         return result.IsSuccess
-            ? CreatedAtAction(nameof(GetById), new { id = result.Value!.Id }, result.Value!.ToResponse())
+            ? CreatedAtAction(nameof(GetById), new { id = result.Value!.Id },
+                result.Value.ToResponse(_transactions.LastClassification))
             : result.ToProblemDetails();
     }
 

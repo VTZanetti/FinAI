@@ -7,6 +7,7 @@ using FinAI.Api.Repositories;
 using FinAI.Api.Security;
 using FinAI.Api.Services;
 using FinAI.Api.Services.Accounts;
+using FinAI.Api.Services.AI;
 using FinAI.Api.Services.Analytics;
 using FinAI.Api.Services.Audit;
 using FinAI.Api.Services.Auth;
@@ -14,6 +15,7 @@ using FinAI.Api.Services.Budgets;
 using FinAI.Api.Services.Categories;
 using FinAI.Api.Services.Transactions;
 using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +45,7 @@ builder.Services.AddControllers()
         o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
 
@@ -97,6 +100,20 @@ builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 // ── Rate limiting ──────────────────────────────────────────────────────────
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
 
+// ── IA: LLM (Ollama) ───────────────────────────────────────────────────────
+builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection(LlmOptions.SectionName));
+builder.Services.AddHttpClient("ollama", client =>
+{
+    var baseUrl = builder.Configuration["Ai:BaseUrl"] ?? "http://localhost:11434";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/'));
+});
+builder.Services.AddScoped<ILlmProvider, OllamaLlmProvider>();
+builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<IPromptBuilder, PromptBuilder>();
+builder.Services.AddScoped<IRuleClassifier, RuleClassifier>();
+builder.Services.AddScoped<IClassificationService, ClassificationService>();
+builder.Services.AddScoped<IFinancialAdvisorService, FinancialAdvisorService>();
+
 // ── DI: Repositories ───────────────────────────────────────────────────────
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
@@ -105,6 +122,7 @@ builder.Services.AddScoped<IBudgetRepository, BudgetRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
+builder.Services.AddScoped<IClassificationCacheRepository, ClassificationCacheRepository>();
 
 // ── DI: Services ───────────────────────────────────────────────────────────
 builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();

@@ -46,6 +46,7 @@ public sealed class FinAiTestFixture : IAsyncLifetime
                 builder.UseSetting("ConnectionStrings:DefaultConnection", _postgres.GetConnectionString());
                 builder.UseSetting("Jwt:SigningKey", TestSigningKey);
                 builder.UseSetting("RateLimiting:Enabled", "false");
+                builder.UseSetting("Ai:Enabled", "false"); // testes rodam em modo rules-only (sem Ollama)
                 builder.UseSetting("Logging:LogLevel:Default", "None");
             });
     }

@@ -1,6 +1,7 @@
 using FinAI.Api.Common;
 using FinAI.Api.Models;
 using FinAI.Api.Repositories;
+using FinAI.Api.Services.AI;
 
 namespace FinAI.Api.Services.Transactions;
 
@@ -11,4 +12,7 @@ public interface ITransactionService
     Task<ServiceResult<IReadOnlyList<Transaction>>> ListAsync(Guid userId, TransactionFilter filter, CancellationToken cancellationToken = default);
     Task<ServiceResult<Transaction>> UpdateAsync(Guid userId, Guid id, UpdateTransactionRequest request, CancellationToken cancellationToken = default);
     Task<Result> DeleteAsync(Guid userId, Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Última classificação automática aplicada (create sem categoryId).</summary>
+    ClassificationResult? LastClassification { get; }
 }

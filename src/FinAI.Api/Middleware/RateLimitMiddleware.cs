@@ -55,9 +55,13 @@ public class RateLimitMiddleware
         var isAuth = path.StartsWith("/api/v1/auth/login", StringComparison.OrdinalIgnoreCase)
                      || path.StartsWith("/api/v1/auth/register", StringComparison.OrdinalIgnoreCase);
 
-        var limit = isAuth ? _options.AuthPerMinute : _options.GeneralPerMinute;
+        var isAi = path.StartsWith("/api/v1/ai/", StringComparison.OrdinalIgnoreCase);
 
-        // Chave: usuário autenticado (sub) ou IP para auth
+        var limit = isAi
+            ? _options.AiPerMinute
+            : isAuth ? _options.AuthPerMinute : _options.GeneralPerMinute;
+
+        // Chave: usuário autenticado (sub) para AI; IP para auth; usuário para geral
         string key;
         if (isAuth)
         {
@@ -66,7 +70,7 @@ public class RateLimitMiddleware
         else
         {
             var sub = currentUser.UserId?.ToString() ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-            key = "user:" + sub;
+            key = (isAi ? "ai:" : "user:") + sub;
         }
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
