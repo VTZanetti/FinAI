@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FinAI.Api/FinAI.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FinAI.IntegrationTests/FinAI.IntegrationTests.csproj" />
+    <Project Path="tests/FinAI.UnitTests/FinAI.UnitTests.csproj" />
+  </Folder>
+</Solution>

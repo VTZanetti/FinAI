@@ -1,0 +1,23 @@
+# Build
+bin/
+obj/
+*.user
+*.suo
+
+# IDE
+.vs/
+.vscode/
+
+# Segredos / config local
+appsettings.Development.json
+.env
+*.env.local
+
+# Uploads / dados locais
+storage/
+uploads/
+TestResults/
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: finai-postgres
+    environment:
+      POSTGRES_USER: finai
+      POSTGRES_PASSWORD: finai
+      POSTGRES_DB: finai
+    ports:
+      - "5432:5432"
+    volumes:
+      - finai_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: finai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q llama3.2"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  finai_pgdata:
+  ollama_data:
