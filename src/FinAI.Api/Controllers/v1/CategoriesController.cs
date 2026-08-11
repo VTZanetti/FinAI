@@ -2,11 +2,13 @@ using FinAI.Api.Common;
 using FinAI.Api.DTOs.Categories;
 using FinAI.Api.Security;
 using FinAI.Api.Services.Categories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinAI.Api.Controllers.v1;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/categories")]
 [Produces("application/json")]
 public class CategoriesController : ControllerBase
@@ -26,7 +28,7 @@ public class CategoriesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateCategoryRequest request, CancellationToken cancellationToken)
     {
-        var result = await _categories.CreateAsync(_currentUser.UserId, request, cancellationToken);
+        var result = await _categories.CreateAsync(_currentUser.RequireUserId(), request, cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = result.Value!.Id }, result.Value!.ToResponse())
             : result.ToProblemDetails();
@@ -37,7 +39,7 @@ public class CategoriesController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<CategoryResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> List([FromQuery] string? search = null, CancellationToken cancellationToken = default)
     {
-        var result = await _categories.ListAsync(_currentUser.UserId, search, cancellationToken);
+        var result = await _categories.ListAsync(_currentUser.RequireUserId(), search, cancellationToken);
         return result.IsSuccess
             ? Ok(result.Value!.Select(c => c.ToResponse()).ToList())
             : result.ToProblemDetails();
@@ -49,7 +51,7 @@ public class CategoriesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _categories.GetByIdAsync(_currentUser.UserId, id, cancellationToken);
+        var result = await _categories.GetByIdAsync(_currentUser.RequireUserId(), id, cancellationToken);
         return result.IsSuccess
             ? Ok(result.Value!.ToResponse())
             : result.ToProblemDetails();
@@ -62,7 +64,7 @@ public class CategoriesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCategoryRequest request, CancellationToken cancellationToken)
     {
-        var result = await _categories.UpdateAsync(_currentUser.UserId, id, request, cancellationToken);
+        var result = await _categories.UpdateAsync(_currentUser.RequireUserId(), id, request, cancellationToken);
         return result.IsSuccess
             ? Ok(result.Value!.ToResponse())
             : result.ToProblemDetails();
@@ -75,7 +77,7 @@ public class CategoriesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _categories.DeleteAsync(_currentUser.UserId, id, cancellationToken);
+        var result = await _categories.DeleteAsync(_currentUser.RequireUserId(), id, cancellationToken);
         return result.IsSuccess
             ? NoContent()
             : result.ToProblemDetails();

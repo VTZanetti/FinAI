@@ -1,15 +1,22 @@
+using System.Text;
 using System.Text.Json.Serialization;
 using FinAI.Api.Data;
 using FinAI.Api.Middleware;
+using FinAI.Api.Models;
 using FinAI.Api.Repositories;
 using FinAI.Api.Security;
 using FinAI.Api.Services;
 using FinAI.Api.Services.Accounts;
+using FinAI.Api.Services.Audit;
+using FinAI.Api.Services.Auth;
 using FinAI.Api.Services.Budgets;
 using FinAI.Api.Services.Categories;
 using FinAI.Api.Services.Transactions;
 using FluentValidation;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Serilog;
 
@@ -42,14 +49,60 @@ builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
 builder.Services.AddDbContext<FinAiDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// ── Identity ───────────────────────────────────────────────────────────────
+builder.Services.AddIdentityCore<FinAiUser>(options =>
+    {
+        options.Password.RequireDigit = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireNonAlphanumeric = true;
+        options.Password.RequiredLength = 8;
+        options.User.RequireUniqueEmail = true;
+    })
+    .AddRoles<IdentityRole<Guid>>()
+    .AddEntityFrameworkStores<FinAiDbContext>()
+    .AddSignInManager()
+    .AddDefaultTokenProviders();
+
+// ── JWT ────────────────────────────────────────────────────────────────────
+var jwtSection = builder.Configuration.GetSection(JwtOptions.SectionName);
+builder.Services.Configure<JwtOptions>(jwtSection);
+
+var jwt = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwt.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwt.Audience,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.SigningKey)),
+            ClockSkew = TimeSpan.FromSeconds(30),
+            NameClaimType = System.Security.Claims.ClaimTypes.NameIdentifier
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 // ── DI: Security ───────────────────────────────────────────────────────────
-builder.Services.AddScoped<ICurrentUser, DevCurrentUser>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
+
+// ── Rate limiting ──────────────────────────────────────────────────────────
+builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
 
 // ── DI: Repositories ───────────────────────────────────────────────────────
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
 builder.Services.AddScoped<IBudgetRepository, BudgetRepository>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 
 // ── DI: Services ───────────────────────────────────────────────────────────
 builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
@@ -57,6 +110,10 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<ITransactionService, TransactionService>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 // ── Swagger/OpenAPI ────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -68,6 +125,30 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1",
         Description = "Financial Intelligence as a Service — API financeira inteligente."
     });
+
+    // Botão Authorize (Bearer)
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Cole o token JWT: Bearer {token}"
+    });
+
+    // OpenApi 2.x: o security requirement usa referências de esquema
+    c.AddSecurityRequirement(doc =>
+    {
+        var reference = new OpenApiSecuritySchemeReference(
+            "Bearer",
+            doc,
+            "Bearer");
+        return new OpenApiSecurityRequirement
+        {
+            { reference, new List<string>() }
+        };
+    });
 });
 
 // ── Health checks ──────────────────────────────────────────────────────────
@@ -75,6 +156,17 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<FinAiDbContext>("postgres");
 
 var app = builder.Build();
+
+// ── Seed de papéis (User, Admin) — garante que existam em qualquer ambiente ─
+using (var scope = app.Services.CreateScope())
+{
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+    foreach (var role in new[] { AuthService.RoleUser, AuthService.RoleAdmin })
+    {
+        if (!await roleManager.RoleExistsAsync(role))
+            await roleManager.CreateAsync(new IdentityRole<Guid>(role));
+    }
+}
 
 // ── Pipeline ───────────────────────────────────────────────────────────────
 app.UseMiddleware<ExceptionHandlingMiddleware>();
@@ -88,6 +180,11 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseMiddleware<RateLimitMiddleware>();
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapHealthChecks("/health/ready");

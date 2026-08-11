@@ -2,11 +2,13 @@ using FinAI.Api.Common;
 using FinAI.Api.DTOs.Budgets;
 using FinAI.Api.Security;
 using FinAI.Api.Services.Budgets;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinAI.Api.Controllers.v1;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/budgets")]
 [Produces("application/json")]
 public class BudgetsController : ControllerBase
@@ -26,11 +28,11 @@ public class BudgetsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateBudgetRequest request, CancellationToken cancellationToken)
     {
-        var result = await _budgets.CreateAsync(_currentUser.UserId, request, cancellationToken);
+        var result = await _budgets.CreateAsync(_currentUser.RequireUserId(), request, cancellationToken);
         if (!result.IsSuccess)
             return result.ToProblemDetails();
 
-        var spent = await _budgets.GetSpentAmountAsync(_currentUser.UserId, result.Value!, cancellationToken);
+        var spent = await _budgets.GetSpentAmountAsync(_currentUser.RequireUserId(), result.Value!, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = result.Value!.Id }, result.Value!.ToResponse(spent));
     }
 
@@ -39,14 +41,14 @@ public class BudgetsController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<BudgetResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> List([FromQuery] int? month = null, [FromQuery] int? year = null, CancellationToken cancellationToken = default)
     {
-        var result = await _budgets.ListAsync(_currentUser.UserId, month, year, cancellationToken);
+        var result = await _budgets.ListAsync(_currentUser.RequireUserId(), month, year, cancellationToken);
         if (!result.IsSuccess)
             return result.ToProblemDetails();
 
         var responses = new List<BudgetResponse>();
         foreach (var budget in result.Value!)
         {
-            var spent = await _budgets.GetSpentAmountAsync(_currentUser.UserId, budget, cancellationToken);
+            var spent = await _budgets.GetSpentAmountAsync(_currentUser.RequireUserId(), budget, cancellationToken);
             responses.Add(budget.ToResponse(spent));
         }
 
@@ -59,11 +61,11 @@ public class BudgetsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _budgets.GetByIdAsync(_currentUser.UserId, id, cancellationToken);
+        var result = await _budgets.GetByIdAsync(_currentUser.RequireUserId(), id, cancellationToken);
         if (!result.IsSuccess)
             return result.ToProblemDetails();
 
-        var spent = await _budgets.GetSpentAmountAsync(_currentUser.UserId, result.Value!, cancellationToken);
+        var spent = await _budgets.GetSpentAmountAsync(_currentUser.RequireUserId(), result.Value!, cancellationToken);
         return Ok(result.Value!.ToResponse(spent));
     }
 
@@ -73,11 +75,11 @@ public class BudgetsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateBudgetRequest request, CancellationToken cancellationToken)
     {
-        var result = await _budgets.UpdateAsync(_currentUser.UserId, id, request, cancellationToken);
+        var result = await _budgets.UpdateAsync(_currentUser.RequireUserId(), id, request, cancellationToken);
         if (!result.IsSuccess)
             return result.ToProblemDetails();
 
-        var spent = await _budgets.GetSpentAmountAsync(_currentUser.UserId, result.Value!, cancellationToken);
+        var spent = await _budgets.GetSpentAmountAsync(_currentUser.RequireUserId(), result.Value!, cancellationToken);
         return Ok(result.Value!.ToResponse(spent));
     }
 
@@ -87,7 +89,7 @@ public class BudgetsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _budgets.DeleteAsync(_currentUser.UserId, id, cancellationToken);
+        var result = await _budgets.DeleteAsync(_currentUser.RequireUserId(), id, cancellationToken);
         return result.IsSuccess
             ? NoContent()
             : result.ToProblemDetails();

@@ -1,27 +1,45 @@
+using System.Security.Claims;
+
 namespace FinAI.Api.Security;
 
 /// <summary>
-/// Provedor do usuário autenticado na requisição atual.
-/// Na v0.1 retorna o usuário de desenvolvimento; na v0.2 passa a ler o claim <c>sub</c> do JWT.
+/// Provedor do usuário autenticado na requisição atual (claims do JWT).
 /// </summary>
 public interface ICurrentUser
 {
-    Guid UserId { get; }
+    Guid? UserId { get; }
+    string? Email { get; }
+    bool IsAuthenticated { get; }
+    bool IsAdmin { get; }
 }
 
 /// <summary>
-/// Implementação de desenvolvimento (v0.1) — lê o <c>DevUser:Id</c> da configuração.
-/// A autenticação real (claims JWT) chega na v0.2.
+/// Lê os claims do JWT do HttpContext (sub, email, role).
 /// </summary>
-public sealed class DevCurrentUser : ICurrentUser
+public sealed class HttpContextCurrentUser : ICurrentUser
 {
-    private readonly Guid _userId;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public DevCurrentUser(IConfiguration configuration)
+    public HttpContextCurrentUser(IHttpContextAccessor httpContextAccessor)
     {
-        var raw = configuration["DevUser:Id"];
-        _userId = Guid.TryParse(raw, out var id) ? id : Guid.Empty;
+        _httpContextAccessor = httpContextAccessor;
     }
 
-    public Guid UserId => _userId;
+    private ClaimsPrincipal? User => _httpContextAccessor.HttpContext?.User;
+
+    public Guid? UserId
+    {
+        get
+        {
+            var sub = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? User?.FindFirstValue("sub");
+            return Guid.TryParse(sub, out var id) ? id : null;
+        }
+    }
+
+    public string? Email => User?.FindFirstValue(ClaimTypes.Email) ?? User?.FindFirstValue("email");
+
+    public bool IsAuthenticated => User?.Identity?.IsAuthenticated ?? false;
+
+    public bool IsAdmin => User?.IsInRole("Admin") ?? false;
 }

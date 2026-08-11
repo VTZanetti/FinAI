@@ -2,6 +2,7 @@ using FinAI.Api.Common;
 using FinAI.Api.Models;
 using FinAI.Api.Models.Enums;
 using FinAI.Api.Repositories;
+using FinAI.Api.Services.Audit;
 
 namespace FinAI.Api.Services.Transactions;
 
@@ -11,17 +12,20 @@ public class TransactionService : ITransactionService
     private readonly IAccountRepository _accounts;
     private readonly ICategoryRepository _categories;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditService _audit;
 
     public TransactionService(
         ITransactionRepository transactions,
         IAccountRepository accounts,
         ICategoryRepository categories,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAuditService audit)
     {
         _transactions = transactions;
         _accounts = accounts;
         _categories = categories;
         _unitOfWork = unitOfWork;
+        _audit = audit;
     }
 
     public async Task<ServiceResult<Transaction>> CreateAsync(Guid userId, CreateTransactionRequest request, CancellationToken cancellationToken = default)
@@ -64,6 +68,12 @@ public class TransactionService : ITransactionService
         await _unitOfWork.SaveChangesAsync(cancellationToken); // depois persiste o saldo recalculado
 
         var saved = await _transactions.GetByIdAsync(transaction.Id, userId, cancellationToken);
+
+        // Auditoria: valor mascarado pelo AuditDataSanitizer
+        await _audit.RecordAsync("transaction.create", "Transaction", transaction.Id,
+            new { description = transaction.Description, amount = transaction.Amount, accountId = transaction.AccountId },
+            cancellationToken);
+
         return ServiceResult<Transaction>.Success(saved ?? transaction, 0, 0, 1, 20);
     }
 
@@ -115,6 +125,11 @@ public class TransactionService : ITransactionService
         await _unitOfWork.SaveChangesAsync(cancellationToken); // persiste os saldos recalculados
 
         var saved = await _transactions.GetByIdAsync(transaction.Id, userId, cancellationToken);
+
+        await _audit.RecordAsync("transaction.update", "Transaction", transaction.Id,
+            new { description = transaction.Description, amount = transaction.Amount, accountId = transaction.AccountId },
+            cancellationToken);
+
         return ServiceResult<Transaction>.Success(saved ?? transaction, 0, 0, 1, 20);
     }
 
@@ -131,6 +146,8 @@ public class TransactionService : ITransactionService
 
         await RecalculateBalanceAsync(userId, accountId, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken); // persiste o saldo recalculado
+
+        await _audit.RecordAsync("transaction.delete", "Transaction", id, null, cancellationToken);
 
         return Result.Success();
     }

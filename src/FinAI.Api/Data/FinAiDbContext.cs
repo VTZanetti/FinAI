@@ -1,14 +1,16 @@
 using FinAI.Api.Data.Configurations;
 using FinAI.Api.Data.Seed;
 using FinAI.Api.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinAI.Api.Data;
 
 /// <summary>
-/// DbContext do FinAI — tabelas em snake_case, valores monetários decimal(18,2).
+/// DbContext do FinAI — tabelas em snake_case, valores monetários decimal(18,2), Identity integrado.
 /// </summary>
-public class FinAiDbContext : DbContext
+public class FinAiDbContext : IdentityDbContext<FinAiUser, IdentityRole<Guid>, Guid>
 {
     public FinAiDbContext(DbContextOptions<FinAiDbContext> options)
         : base(options)
@@ -19,6 +21,8 @@ public class FinAiDbContext : DbContext
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

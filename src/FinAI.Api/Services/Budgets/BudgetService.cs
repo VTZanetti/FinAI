@@ -1,6 +1,7 @@
 using FinAI.Api.Common;
 using FinAI.Api.Models;
 using FinAI.Api.Repositories;
+using FinAI.Api.Services.Audit;
 
 namespace FinAI.Api.Services.Budgets;
 
@@ -10,17 +11,20 @@ public class BudgetService : IBudgetService
     private readonly ICategoryRepository _categories;
     private readonly ITransactionRepository _transactions;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditService _audit;
 
     public BudgetService(
         IBudgetRepository budgets,
         ICategoryRepository categories,
         ITransactionRepository transactions,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAuditService audit)
     {
         _budgets = budgets;
         _categories = categories;
         _transactions = transactions;
         _unitOfWork = unitOfWork;
+        _audit = audit;
     }
 
     public async Task<Result<Budget>> CreateAsync(Guid userId, CreateBudgetRequest request, CancellationToken cancellationToken = default)
@@ -49,6 +53,10 @@ public class BudgetService : IBudgetService
 
         await _budgets.AddAsync(budget, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _audit.RecordAsync("budget.create", "Budget", budget.Id,
+            new { categoryId = budget.CategoryId, month = budget.Month, year = budget.Year, limitAmount = budget.LimitAmount },
+            cancellationToken);
 
         return Result.Success(budget);
     }
@@ -79,6 +87,8 @@ public class BudgetService : IBudgetService
         _budgets.Update(budget);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await _audit.RecordAsync("budget.update", "Budget", budget.Id, new { limitAmount = budget.LimitAmount }, cancellationToken);
+
         return Result.Success(budget);
     }
 
@@ -90,6 +100,8 @@ public class BudgetService : IBudgetService
 
         _budgets.Delete(budget);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _audit.RecordAsync("budget.delete", "Budget", budget.Id, null, cancellationToken);
 
         return Result.Success();
     }

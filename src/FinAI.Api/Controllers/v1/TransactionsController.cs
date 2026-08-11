@@ -5,11 +5,13 @@ using FinAI.Api.Models.Enums;
 using FinAI.Api.Repositories;
 using FinAI.Api.Security;
 using FinAI.Api.Services.Transactions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinAI.Api.Controllers.v1;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/transactions")]
 [Produces("application/json")]
 public class TransactionsController : ControllerBase
@@ -33,7 +35,7 @@ public class TransactionsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Create([FromBody] CreateTransactionRequest request, CancellationToken cancellationToken)
     {
-        var result = await _transactions.CreateAsync(_currentUser.UserId, request, cancellationToken);
+        var result = await _transactions.CreateAsync(_currentUser.RequireUserId(), request, cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = result.Value!.Id }, result.Value!.ToResponse())
             : result.ToProblemDetails();
@@ -45,7 +47,7 @@ public class TransactionsController : ControllerBase
     public async Task<IActionResult> List([FromQuery] TransactionListQuery query, CancellationToken cancellationToken)
     {
         var filter = ToFilter(query);
-        var result = await _transactions.ListAsync(_currentUser.UserId, filter, cancellationToken);
+        var result = await _transactions.ListAsync(_currentUser.RequireUserId(), filter, cancellationToken);
 
         if (!result.IsSuccess)
             return result.ToProblemDetails();
@@ -64,7 +66,7 @@ public class TransactionsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _transactions.GetByIdAsync(_currentUser.UserId, id, cancellationToken);
+        var result = await _transactions.GetByIdAsync(_currentUser.RequireUserId(), id, cancellationToken);
         return result.IsSuccess
             ? Ok(result.Value!.ToResponse())
             : result.ToProblemDetails();
@@ -76,7 +78,7 @@ public class TransactionsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTransactionRequest request, CancellationToken cancellationToken)
     {
-        var result = await _transactions.UpdateAsync(_currentUser.UserId, id, request, cancellationToken);
+        var result = await _transactions.UpdateAsync(_currentUser.RequireUserId(), id, request, cancellationToken);
         return result.IsSuccess
             ? Ok(result.Value!.ToResponse())
             : result.ToProblemDetails();
@@ -88,7 +90,7 @@ public class TransactionsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _transactions.DeleteAsync(_currentUser.UserId, id, cancellationToken);
+        var result = await _transactions.DeleteAsync(_currentUser.RequireUserId(), id, cancellationToken);
         return result.IsSuccess
             ? NoContent()
             : result.ToProblemDetails();

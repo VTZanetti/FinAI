@@ -1,6 +1,7 @@
 using FinAI.Api.Common;
 using FinAI.Api.Models;
 using FinAI.Api.Repositories;
+using FinAI.Api.Services.Audit;
 
 namespace FinAI.Api.Services.Accounts;
 
@@ -8,11 +9,13 @@ public class AccountService : IAccountService
 {
     private readonly IAccountRepository _accounts;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditService _audit;
 
-    public AccountService(IAccountRepository accounts, IUnitOfWork unitOfWork)
+    public AccountService(IAccountRepository accounts, IUnitOfWork unitOfWork, IAuditService audit)
     {
         _accounts = accounts;
         _unitOfWork = unitOfWork;
+        _audit = audit;
     }
 
     public async Task<Result<Account>> CreateAsync(Guid userId, CreateAccountRequest request, CancellationToken cancellationToken = default)
@@ -31,6 +34,8 @@ public class AccountService : IAccountService
 
         await _accounts.AddAsync(account, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _audit.RecordAsync("account.create", "Account", account.Id, new { name = account.Name }, cancellationToken);
 
         return Result.Success(account);
     }
@@ -64,6 +69,8 @@ public class AccountService : IAccountService
         _accounts.Update(account);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await _audit.RecordAsync("account.update", "Account", account.Id, new { name = account.Name }, cancellationToken);
+
         return Result.Success(account);
     }
 
@@ -80,6 +87,8 @@ public class AccountService : IAccountService
 
         _accounts.Delete(account);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _audit.RecordAsync("account.delete", "Account", account.Id, new { name = account.Name }, cancellationToken);
 
         return Result.Success();
     }

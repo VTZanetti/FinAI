@@ -1,6 +1,7 @@
 using FinAI.Api.Common;
 using FinAI.Api.Models;
 using FinAI.Api.Repositories;
+using FinAI.Api.Services.Audit;
 
 namespace FinAI.Api.Services.Categories;
 
@@ -8,11 +9,13 @@ public class CategoryService : ICategoryService
 {
     private readonly ICategoryRepository _categories;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAuditService _audit;
 
-    public CategoryService(ICategoryRepository categories, IUnitOfWork unitOfWork)
+    public CategoryService(ICategoryRepository categories, IUnitOfWork unitOfWork, IAuditService audit)
     {
         _categories = categories;
         _unitOfWork = unitOfWork;
+        _audit = audit;
     }
 
     public async Task<Result<Category>> CreateAsync(Guid userId, CreateCategoryRequest request, CancellationToken cancellationToken = default)
@@ -33,6 +36,8 @@ public class CategoryService : ICategoryService
 
         await _categories.AddAsync(category, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _audit.RecordAsync("category.create", "Category", category.Id, new { name = category.Name }, cancellationToken);
 
         return Result.Success(category);
     }
@@ -66,6 +71,8 @@ public class CategoryService : ICategoryService
         _categories.Update(category);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await _audit.RecordAsync("category.update", "Category", category.Id, new { name = category.Name }, cancellationToken);
+
         return Result.Success(category);
     }
 
@@ -84,6 +91,8 @@ public class CategoryService : ICategoryService
 
         _categories.Delete(category);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _audit.RecordAsync("category.delete", "Category", category.Id, new { name = category.Name }, cancellationToken);
 
         return Result.Success();
     }
