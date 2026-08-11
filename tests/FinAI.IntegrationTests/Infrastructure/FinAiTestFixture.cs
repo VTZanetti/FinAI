@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Pgvector.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 
 namespace FinAI.IntegrationTests.Infrastructure;
@@ -35,7 +36,7 @@ public sealed class FinAiTestFixture : IAsyncLifetime
         // Aplica migrations ANTES de criar a factory — o host inicia o seed de papéis
         // no startup (Program.cs), que exige as tabelas de Identity já existentes.
         var services = new ServiceCollection();
-        services.AddDbContext<FinAiDbContext>(o => o.UseNpgsql(_postgres.GetConnectionString()));
+        services.AddDbContext<FinAiDbContext>(o => o.UseNpgsql(_postgres.GetConnectionString(), n => n.UseVector()));
         await using var provider = services.BuildServiceProvider();
         var db = provider.GetRequiredService<FinAiDbContext>();
         await db.Database.MigrateAsync();
@@ -47,6 +48,7 @@ public sealed class FinAiTestFixture : IAsyncLifetime
                 builder.UseSetting("Jwt:SigningKey", TestSigningKey);
                 builder.UseSetting("RateLimiting:Enabled", "false");
                 builder.UseSetting("Ai:Enabled", "false"); // testes rodam em modo rules-only (sem Ollama)
+                builder.UseSetting("Documents:ProcessingEnabled", "false"); // sem pipeline async nos testes
                 builder.UseSetting("Logging:LogLevel:Default", "None");
             });
     }

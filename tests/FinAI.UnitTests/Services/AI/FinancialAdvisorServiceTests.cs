@@ -1,7 +1,9 @@
 using FinAI.Api.Services.AI;
 using FinAI.Api.Services.Analytics;
+using FinAI.Api.Services.Documents;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace FinAI.UnitTests.Services.AI;
@@ -14,12 +16,21 @@ public class FinancialAdvisorServiceTests
     private readonly IChatService _chat = Substitute.For<IChatService>();
     private readonly IPromptBuilder _promptBuilder = Substitute.For<IPromptBuilder>();
     private readonly IAnalyticsService _analytics = Substitute.For<IAnalyticsService>();
+    private readonly IEmbeddingService _embeddings = Substitute.For<IEmbeddingService>();
+    private readonly IVectorStore _vectorStore = Substitute.For<IVectorStore>();
 
     private FinancialAdvisorService CreateService()
     {
         _promptBuilder.BuildAdvisorPrompt(Arg.Any<string>(), Arg.Any<object>())
             .Returns(new BuiltPrompt("system", "user"));
-        return new FinancialAdvisorService(_chat, _promptBuilder, _analytics, NullLogger<FinancialAdvisorService>.Instance);
+        return new FinancialAdvisorService(
+            _chat,
+            _promptBuilder,
+            _analytics,
+            _embeddings,
+            _vectorStore,
+            Options.Create(new DocumentOptions { SearchTopK = 5, SearchMinScore = 0.5 }),
+            NullLogger<FinancialAdvisorService>.Instance);
     }
 
     private void SetupAnalytics()
