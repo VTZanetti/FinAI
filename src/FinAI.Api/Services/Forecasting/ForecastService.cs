@@ -75,6 +75,8 @@ public class ForecastService : IForecastService
 
         var confidence = BuildConfidence(series.Count, incomeHistory, expensesHistory);
 
+        Telemetry.FinAiMetrics.RecordForecast();
+
         return Result.Success(new CashFlowForecast(Method, DateTimeOffset.UtcNow, forecast, confidence));
     }
 

@@ -13,6 +13,7 @@ using FinAI.Api.Services.Analytics;
 using FinAI.Api.Services.AnomalyDetection;
 using FinAI.Api.Services.AnomalyDetection.Models;
 using FinAI.Api.Services.Audit;
+using FinAI.Api.Services.Caching;
 using FinAI.Api.Services.Documents;
 using FinAI.Api.Services.Forecasting;
 using FinAI.Api.Services.OpenFinance;
@@ -26,6 +27,7 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
@@ -62,6 +64,26 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.Configure<RouteOptions>(o => o.LowercaseUrls = true);
+
+// ── Cache (v1.0): Redis quando configurado, senão fallback em memória ──────
+var redisConnection = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(redisConnection))
+{
+    builder.Services.AddStackExchangeRedisCache(o => o.Configuration = redisConnection);
+    builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+}
+else
+{
+    builder.Services.AddMemoryCache();
+    builder.Services.AddSingleton<ICacheService, MemoryCacheService>();
+}
+
+// ── Compressão de resposta (gzip) ──────────────────────────────────────────
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/problem+json"]);
+});
 
 // ── EF Core + PostgreSQL ───────────────────────────────────────────────────
 builder.Services.AddDbContext<FinAiDbContext>(options =>
@@ -277,9 +299,15 @@ if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"
 }
 
 // ── Pipeline ───────────────────────────────────────────────────────────────
+app.UseResponseCompression();
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
 app.UseSerilogRequestLogging();
+
+app.UseMiddleware<RequestMetricsMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -296,6 +324,12 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapHealthChecks("/health/ready");
+
+// Métricas customizadas (Prometheus text format) — expostas apenas em não-dev
+if (!app.Environment.IsDevelopment())
+{
+    app.MapGet("/metrics", () => Results.Text(FinAI.Api.Telemetry.MetricsEndpoint.Render(), "text/plain; version=0.0.4"));
+}
 
 app.MapControllers();
 

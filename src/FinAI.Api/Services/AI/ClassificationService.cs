@@ -59,7 +59,10 @@ public class ClassificationService : IClassificationService
         // 1. Regras (sem LLM)
         var ruleResult = _rules.Match(sanitized);
         if (ruleResult is not null)
+        {
+            Telemetry.FinAiMetrics.RecordClassification("rules");
             return await ResolveCategoryIdAsync(userId, ruleResult, cancellationToken);
+        }
 
         // 2. Cache de exemplos aprendidos
         if (_options.ClassificationCacheEnabled)
@@ -75,6 +78,7 @@ public class ClassificationService : IClassificationService
                 var category = await _categories.GetByIdAsync(cached.CategoryId, userId, cancellationToken);
                 if (category is not null)
                 {
+                    Telemetry.FinAiMetrics.RecordClassification("cached");
                     return new ClassificationResult(category.Id, category.Name, category.Subcategory, cached.Confidence, "cached");
                 }
             }
@@ -101,6 +105,7 @@ public class ClassificationService : IClassificationService
                             await SaveToCacheAsync(userId, normalized, amountBucket, matched, parsed.Confidence, cancellationToken);
                         }
 
+                        Telemetry.FinAiMetrics.RecordClassification("llm");
                         return new ClassificationResult(matched.Id, matched.Name, matched.Subcategory, parsed.Confidence, "llm");
                     }
                 }
@@ -112,6 +117,7 @@ public class ClassificationService : IClassificationService
         }
 
         // 5. Fallback: categoria "Other" com confiança baixa
+        Telemetry.FinAiMetrics.RecordClassification("fallback");
         var other = allowedCategories.FirstOrDefault(c => c.Name == "Other" && c.IsSystem);
         return new ClassificationResult(
             other?.Id,

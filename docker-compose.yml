@@ -8,6 +8,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=finai;Username=finai;Password=finai"
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false"
       Jwt__SigningKey: "${JWT_SIGNING_KEY:-dev-only-signing-key-finai-64-caracteres-0000000000000000000000000000000000000001}"
       Jwt__Issuer: "FinAI"
       Jwt__Audience: "FinAI.Clients"
@@ -30,12 +31,25 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: finai-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: pgvector/pgvector:pg16

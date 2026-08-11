@@ -77,6 +77,9 @@ public class AnomalyDetectionService : IAnomalyDetectionService
             historyByCategory.TryGetValue(category, out var baseline);
 
             var assessment = detector.Assess(Math.Abs(transaction.Amount), baseline ?? []);
+            if (assessment.Anomaly)
+                Telemetry.FinAiMetrics.RecordAnomaly();
+
             items.Add(new AnomalyResult(
                 transaction.Id,
                 transaction.Description,

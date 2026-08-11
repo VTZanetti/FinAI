@@ -1,0 +1,46 @@
+# Observabilidade opcional — Prometheus + Grafana
+# Uso: docker compose -f docker-compose.monitoring.yml up -d
+# Requer: docker compose up -d (compose principal, rede "finai_default")
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: finai-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - finai_default
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: finai-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - finai_default
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  finai_default:
+    external: true

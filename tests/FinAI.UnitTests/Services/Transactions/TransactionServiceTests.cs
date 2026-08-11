@@ -5,6 +5,7 @@ using FinAI.Api.Repositories;
 using FinAI.Api.Services;
 using FinAI.Api.Services.AI;
 using FinAI.Api.Services.Audit;
+using FinAI.Api.Services.Caching;
 using FinAI.Api.Services.Transactions;
 using FluentAssertions;
 using NSubstitute;
@@ -24,8 +25,9 @@ public class TransactionServiceTests
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuditService _audit = Substitute.For<IAuditService>();
     private readonly IClassificationService _classification = Substitute.For<IClassificationService>();
+    private readonly ICacheService _cache = Substitute.For<ICacheService>();
 
-    private TransactionService CreateService() => new(_transactions, _accounts, _categories, _unitOfWork, _audit, _classification);
+    private TransactionService CreateService() => new(_transactions, _accounts, _categories, _unitOfWork, _audit, _classification, _cache);
 
     private static Account Account(decimal initial = 0m) => new()
     {

@@ -4,6 +4,7 @@ using FinAI.Api.Models.Enums;
 using FinAI.Api.Repositories;
 using FinAI.Api.Services.AI;
 using FinAI.Api.Services.Audit;
+using FinAI.Api.Services.Caching;
 
 namespace FinAI.Api.Services.Transactions;
 
@@ -15,6 +16,7 @@ public class TransactionService : ITransactionService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditService _audit;
     private readonly IClassificationService _classification;
+    private readonly ICacheService _cache;
 
     public TransactionService(
         ITransactionRepository transactions,
@@ -22,7 +24,8 @@ public class TransactionService : ITransactionService
         ICategoryRepository categories,
         IUnitOfWork unitOfWork,
         IAuditService audit,
-        IClassificationService classification)
+        IClassificationService classification,
+        ICacheService cache)
     {
         _transactions = transactions;
         _accounts = accounts;
@@ -30,6 +33,7 @@ public class TransactionService : ITransactionService
         _unitOfWork = unitOfWork;
         _audit = audit;
         _classification = classification;
+        _cache = cache;
     }
 
     public async Task<ServiceResult<Transaction>> CreateAsync(Guid userId, CreateTransactionRequest request, CancellationToken cancellationToken = default)
@@ -88,6 +92,8 @@ public class TransactionService : ITransactionService
         await _audit.RecordAsync("transaction.create", "Transaction", transaction.Id,
             new { description = transaction.Description, amount = transaction.Amount, accountId = transaction.AccountId },
             cancellationToken);
+
+        InvalidateAnalyticsCache(userId);
 
         return ServiceResult<Transaction>.Success(saved ?? transaction, 0, 0, 1, 20);
     }
@@ -152,6 +158,8 @@ public class TransactionService : ITransactionService
             new { description = transaction.Description, amount = transaction.Amount, accountId = transaction.AccountId },
             cancellationToken);
 
+        InvalidateAnalyticsCache(userId);
+
         return ServiceResult<Transaction>.Success(saved ?? transaction, 0, 0, 1, 20);
     }
 
@@ -171,7 +179,17 @@ public class TransactionService : ITransactionService
 
         await _audit.RecordAsync("transaction.delete", "Transaction", id, null, cancellationToken);
 
+        InvalidateAnalyticsCache(userId);
+
         return Result.Success();
+    }
+
+    private void InvalidateAnalyticsCache(Guid userId)
+    {
+        // Remove as chaves de analytics do usuário (invalidação por evento)
+        _cache.RemoveByPrefix($"analytics:spending:{userId}:");
+        _cache.RemoveByPrefix($"analytics:behavior:{userId}:");
+        _cache.RemoveByPrefix($"analytics:trend:{userId}:");
     }
 
     private static TransactionType DeriveType(decimal amount)
