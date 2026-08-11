@@ -30,7 +30,11 @@ public class AccountConfiguration : IEntityTypeConfiguration<Account>
             .HasConversion<string>()
             .HasMaxLength(32);
 
+        builder.Property(a => a.ExternalId)
+            .HasMaxLength(120);
+
         builder.HasIndex(a => new { a.UserId, a.Name });
+        builder.HasIndex(a => new { a.UserId, a.ExternalId });
 
         builder.HasMany(a => a.Transactions)
             .WithOne(t => t.Account)

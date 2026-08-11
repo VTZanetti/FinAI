@@ -16,6 +16,9 @@ public class AccountRepository : IAccountRepository
     public Task<Account?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken = default)
         => _db.Accounts.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, cancellationToken);
 
+    public Task<Account?> FindByExternalIdAsync(Guid userId, string externalId, CancellationToken cancellationToken = default)
+        => _db.Accounts.FirstOrDefaultAsync(a => a.UserId == userId && a.ExternalId == externalId, cancellationToken);
+
     public async Task<IReadOnlyList<Account>> ListByUserAsync(Guid userId, CancellationToken cancellationToken = default)
         => await _db.Accounts
             .AsNoTracking()

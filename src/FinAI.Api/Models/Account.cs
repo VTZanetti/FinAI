@@ -14,6 +14,7 @@ public class Account
     public string Currency { get; set; } = "BRL";
     public decimal InitialBalance { get; set; }
     public decimal CurrentBalance { get; set; }
+    public string? ExternalId { get; set; } // id da conta na fonte externa (ex.: Pluggy) — deduplicação
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 

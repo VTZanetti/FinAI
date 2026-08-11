@@ -26,6 +26,8 @@ public class FinAiDbContext : IdentityDbContext<FinAiUser, IdentityRole<Guid>, G
     public DbSet<ClassificationCache> ClassificationCaches => Set<ClassificationCache>();
     public DbSet<FinancialDocument> Documents => Set<FinancialDocument>();
     public DbSet<DocumentChunk> DocumentChunks => Set<DocumentChunk>();
+    public DbSet<OpenFinanceSync> OpenFinanceSyncs => Set<OpenFinanceSync>();
+    public DbSet<UserBankConnection> UserBankConnections => Set<UserBankConnection>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

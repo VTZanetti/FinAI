@@ -49,6 +49,7 @@ public sealed class FinAiTestFixture : IAsyncLifetime
                 builder.UseSetting("RateLimiting:Enabled", "false");
                 builder.UseSetting("Ai:Enabled", "false"); // testes rodam em modo rules-only (sem Ollama)
                 builder.UseSetting("Documents:ProcessingEnabled", "false"); // sem pipeline async nos testes
+                builder.UseSetting("Pluggy:ItemId", ""); // sem ItemId configurado nos testes
                 builder.UseSetting("Logging:LogLevel:Default", "None");
             });
     }

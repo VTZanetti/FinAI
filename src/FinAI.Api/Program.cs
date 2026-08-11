@@ -15,6 +15,9 @@ using FinAI.Api.Services.AnomalyDetection.Models;
 using FinAI.Api.Services.Audit;
 using FinAI.Api.Services.Documents;
 using FinAI.Api.Services.Forecasting;
+using FinAI.Api.Services.OpenFinance;
+using FinAI.Api.Services.OpenFinance.Background;
+using FinAI.Api.Services.OpenFinance.Options;
 using FinAI.Api.Services.Auth;
 using FinAI.Api.Services.Budgets;
 using FinAI.Api.Services.Categories;
@@ -129,6 +132,21 @@ builder.Services.AddScoped<IFinancialAdvisorService, FinancialAdvisorService>();
 builder.Services.AddHttpClient("external-llm");
 builder.Services.AddSingleton<IExternalProviderRegistry, ExternalProviderRegistry>();
 builder.Services.AddSingleton<IExternalLlmProviderFactory, ExternalLlmProviderFactory>();
+
+// ── Open Finance / Pluggy (v0.8) ───────────────────────────────────────────
+builder.Services.Configure<PluggyOptions>(builder.Configuration.GetSection(PluggyOptions.SectionName));
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient("pluggy", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Pluggy:BaseUrl"] ?? "https://api.pluggy.ai");
+});
+builder.Services.AddScoped<IPluggyClient, PluggyClient>();
+builder.Services.AddScoped<IPluggyAuthService, PluggyAuthService>();
+builder.Services.AddScoped<IOpenFinanceRepository, OpenFinanceRepository>();
+builder.Services.AddScoped<IOpenFinanceSyncService, OpenFinanceSyncService>();
+builder.Services.AddScoped<IOpenFinanceConnectionService, OpenFinanceConnectionService>();
+builder.Services.AddScoped<IOpenFinanceStatusService, OpenFinanceStatusService>();
+builder.Services.AddHostedService<OpenFinanceSyncHostedService>();
 
 // ── DI: Repositories ───────────────────────────────────────────────────────
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
