@@ -1,4 +1,42 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finai-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=finai;Username=finai;Password=finai"
+      Jwt__SigningKey: "${JWT_SIGNING_KEY:-dev-only-signing-key-finai-64-caracteres-0000000000000000000000000000000000000001}"
+      Jwt__Issuer: "FinAI"
+      Jwt__Audience: "FinAI.Clients"
+      Ai__Provider: "Ollama"
+      Ai__BaseUrl: "http://ollama:11434"
+      Ai__ChatModel: "llama3.2"
+      Ai__EmbeddingModel: "nomic-embed-text"
+      Ai__Enabled: "true"
+      Documents__StoragePath: "/app/data/documents"
+      Pluggy__ClientId: "${PLUGGY_CLIENT_ID:-}"
+      Pluggy__ClientSecret: "${PLUGGY_CLIENT_SECRET:-}"
+      Pluggy__ItemId: "${PLUGGY_ITEM_ID:-}"
+      Pluggy__ScheduleEnabled: "${PLUGGY_SCHEDULE_ENABLED:-false}"
+    ports:
+      - "8080:8080"
+    volumes:
+      - finai_docs:/app/data/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: finai-postgres
@@ -32,3 +70,4 @@ services:
 volumes:
   finai_pgdata:
   ollama_data:
+  finai_docs:

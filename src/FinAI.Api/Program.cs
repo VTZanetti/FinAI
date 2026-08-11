@@ -8,6 +8,7 @@ using FinAI.Api.Security;
 using FinAI.Api.Services;
 using FinAI.Api.Services.Accounts;
 using FinAI.Api.Services.AI;
+using FinAI.Api.Services.AI.External;
 using FinAI.Api.Services.Analytics;
 using FinAI.Api.Services.AnomalyDetection;
 using FinAI.Api.Services.AnomalyDetection.Models;
@@ -124,6 +125,11 @@ builder.Services.AddScoped<IRuleClassifier, RuleClassifier>();
 builder.Services.AddScoped<IClassificationService, ClassificationService>();
 builder.Services.AddScoped<IFinancialAdvisorService, FinancialAdvisorService>();
 
+// ── Providers externos (v0.7) ──────────────────────────────────────────────
+builder.Services.AddHttpClient("external-llm");
+builder.Services.AddSingleton<IExternalProviderRegistry, ExternalProviderRegistry>();
+builder.Services.AddSingleton<IExternalLlmProviderFactory, ExternalLlmProviderFactory>();
+
 // ── DI: Repositories ───────────────────────────────────────────────────────
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
@@ -227,6 +233,28 @@ using (var scope = app.Services.CreateScope())
     {
         if (!await roleManager.RoleExistsAsync(role))
             await roleManager.CreateAsync(new IdentityRole<Guid>(role));
+    }
+}
+
+// ── Migrations automáticas (Docker/Production) ─────────────────────────────
+// Em dev/testes, as migrations são aplicadas via CLI/Testcontainers.
+if (!app.Environment.IsDevelopment() && !app.Environment.IsEnvironment("Testing"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<FinAiDbContext>();
+    for (var attempt = 1; attempt <= 5; attempt++)
+    {
+        try
+        {
+            await db.Database.MigrateAsync();
+            break;
+        }
+        catch (Exception ex) when (attempt < 5)
+        {
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            logger.LogWarning(ex, "Migration attempt {Attempt}/5 failed; retrying in 3s", attempt);
+            await Task.Delay(TimeSpan.FromSeconds(3));
+        }
     }
 }
 
