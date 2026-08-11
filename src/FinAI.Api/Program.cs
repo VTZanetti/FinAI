@@ -7,6 +7,7 @@ using FinAI.Api.Repositories;
 using FinAI.Api.Security;
 using FinAI.Api.Services;
 using FinAI.Api.Services.Accounts;
+using FinAI.Api.Services.Analytics;
 using FinAI.Api.Services.Audit;
 using FinAI.Api.Services.Auth;
 using FinAI.Api.Services.Budgets;
@@ -103,6 +104,7 @@ builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
 builder.Services.AddScoped<IBudgetRepository, BudgetRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 
 // ── DI: Services ───────────────────────────────────────────────────────────
 builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
@@ -114,6 +116,10 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ISpendingAnalyzer, SpendingAnalyzer>();
+builder.Services.AddScoped<IBehaviorAnalyzer, BehaviorAnalyzer>();
+builder.Services.AddScoped<IMonthlyTrendAnalyzer, MonthlyTrendAnalyzer>();
+builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 // ── Swagger/OpenAPI ────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
